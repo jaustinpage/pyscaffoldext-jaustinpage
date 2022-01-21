@@ -1,4 +1,4 @@
-# pyscaffoldext-uhnderstand
+# pyscaffoldext-jaustinpage
 
 Get started making a python library quick
 
@@ -51,12 +51,12 @@ In a terminal
    1. In Optional features: select Documentation, Pip, and Python test suite
    1. In Advanced Options: select "Create shortcuts" and "Add python to environment
       variables"
-1. Create a githufolder in your "Documents" directory. We will use this to store github
+1. Create a githubfolder in your "Documents" directory. We will use this to store github
    repos
 1. Launch Powershell and run
    ```shell
    pip install --user --upgrade setuptools setuptools_scm wheel pip
-   pip install --user --upgrade git+ssh://github.com/jaustinpage/pyscaffoldext-jaustinpage#egg=pyscaffoldext-jaustinpage
+   pip install --user --upgrade git+ssh://github.com/jaustinpage/pyscaffoldext-jaustinpage.git
    ```
 1. Add boilerplate to the bare repo
    ```shell
@@ -64,7 +64,7 @@ In a terminal
    git config --global user.name "Peter Gibbons"
    git config --global user.email "Peter.Gibbons@innotech.com"
    # use pyscaffold to initialize the new repo.
-   putup --venv --uhnderstand --force Documents\github\<repo_name>
+   putup --venv --jaustinpage --force Documents\github\<repo_name>
    ```
 
 ### Final Step - README.md in the new repo
