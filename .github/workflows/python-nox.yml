@@ -26,11 +26,13 @@ jobs:
 
       - name: Test with nox
         run: |
-          python3 -m nox --sessions check_format test lint docs(test)
+          git config --global user.name "Austin Page"
+          git config --global user.email "jaustinpage@gmail.com" 
+          nox --session check_format test lint "docs(test)"
 
       - name: Build Python Wheels
         run: |
-          python3 -m nox --sessions build docs(build) docs(pdf)
+          nox --session build "docs(build)" "docs(pdf)"
 
       - name: Upload built python
         uses: actions/upload-artifact@v2
@@ -40,16 +42,6 @@ jobs:
             dist/silver_spork*.whl
             dist/silver-spork*.tar.gz
   
-  py-nox:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - uses: excitedleigh/setup-nox@v2.0.0
-        run: nox
-
-
   py-platform-check:
     runs-on: ${{matrix.os}}
     strategy:
@@ -89,4 +81,4 @@ jobs:
       - name: Test with nox
         if: steps.python-app-files.outputs.any_changed == 'true'
         run: |
-          python3 -m nox --session test_py-{{matrix.python-version}}
+          nox --session test_py-{{matrix.python-version}}
