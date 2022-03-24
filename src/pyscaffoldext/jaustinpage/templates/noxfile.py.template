@@ -1,0 +1,184 @@
+import logging
+from configparser import ConfigParser
+from os import getenv
+from shutil import rmtree
+from typing import List, Optional
+
+import nox
+
+nox.options.sessions = ["default"]
+
+ISORT_FILES = ["src", "tests", "setup.py", "noxfile.py"]
+BLACK_FILES = ["src/", "tests/", "noxfile.py"]
+MARKDOWN_OPTIONS = ["--wrap=88", "--end-of-line=lf"]
+MARKDOWN_FILES = ["README.md", "docs/", "src/", "tests/"]
+SORT_FILE_EXE = ["python3", "scripts/sort_file.py"]
+WHITELIST_FILE = ["whitelist.txt"]
+CI_ENV_VARS = ["CI"]
+
+
+_logger = logging.getLogger(__name__)
+_logger.addHandler(logging.NullHandler())
+
+
+def get_packages(group: Optional[str]) -> List[str]:
+    cf = ConfigParser()
+    cf.read("setup.cfg")
+    return [i for i in cf["options.extras_require"].get(group).splitlines() if i]
+
+
+def warn_package_missing(group: str, checks: List[str]) -> List[str]:
+    packages = get_packages(group)
+    for check in checks:
+        for package in packages:
+            if package.startswith(check):
+                break
+        else:
+            _logger.warning(
+                "Package %s not in setup.cfg [options.extras_require] %s.",
+                check,
+                group,
+            )
+            packages.insert(0, check)
+    return packages
+
+
+def install_tools(group: str, expected: Optional[List[str]] = None):
+    """Install tools for package."""
+    if expected is None:
+        expected = []
+    return warn_package_missing(group, expected)
+
+
+def install_package(
+    group: Optional[str] = None,
+    expected: Optional[List[str]] = None,
+    editable: bool = True,
+) -> List[str]:
+    """Install our package, optionally with tools and section."""
+    if expected and not group:
+        raise ValueError(
+            "Not sure what to do if we want to check packages outside group"
+        )
+
+    if not group:
+        if editable:
+            return ["-e", "."]
+        return ["."]
+
+    if not expected:
+        expected = []
+
+    packages = warn_package_missing(group, expected)
+
+    packages.insert(0, ".")
+
+    if editable:
+        packages.insert(0, "-e")
+
+    return packages
+
+
+@nox.session(python=False)
+def default(session: nox.Session) -> None:
+    if any([getenv(e, False) for e in CI_ENV_VARS]):
+        session.notify("check_format")
+    else:
+        session.notify("format")
+
+    session.notify("test")
+    session.notify("lint")
+    session.notify("mypy")
+    session.notify("docs(build)")
+    session.notify("docs(test)")
+    session.notify("docs(pdf)")
+    session.notify("build")
+
+
+@nox.session(python=False)
+def clean(_: nox.Session) -> None:
+    rmtree("build", True)
+    rmtree("dist", True)
+
+
+@nox.session()
+def format(session: nox.Session) -> None:
+    session.install(*install_tools("formatting", ["isort", "black", "mdformat-gfm"]))
+    session.run("isort", *ISORT_FILES)
+    session.run("black", *BLACK_FILES)
+    session.run("mdformat", *MARKDOWN_OPTIONS, *MARKDOWN_FILES)
+    session.run(*SORT_FILE_EXE, *WHITELIST_FILE)
+
+
+@nox.session
+def check_format(session: nox.Session) -> None:
+    session.install(*install_tools("formatting", ["isort", "black", "mdformat-gfm"]))
+    session.run("isort", *ISORT_FILES, "-c")
+    session.run("black", "--check", *BLACK_FILES)
+    session.run("mdformat", "--check", *MARKDOWN_OPTIONS, *MARKDOWN_FILES)
+    session.run(*SORT_FILE_EXE, "--check", *WHITELIST_FILE)
+
+
+@nox.session
+def test(session: nox.Session) -> None:
+    session.install(
+        *install_package(
+            "testing",
+            ["pytest", "pytest-cov", "coverage[toml]", "setuptools", "setuptools_scm"],
+        )
+    )
+    session.run("pytest")
+
+
+@nox.session
+def lint(session: nox.Session) -> None:
+    session.install(*install_tools("linting", ["flakeheaven"]))
+    session.run("flakeheaven", "lint", "--config=pyproject.toml", "src/")
+    session.run("flakeheaven", "lint", "--config=pyproject.toml", "tests/")
+
+
+@nox.session
+def mypy(session: nox.Session) -> None:
+    session.install(*install_package("typing", ["mypy"]))
+    session.run("mypy", "src/")
+
+
+@nox.session(python=["3.7", "3.8", "3.9", "3.10"])
+def test_all_python(session: nox.Session) -> None:
+    session.install(*install_package("testing", ["pytest"]))
+    session.run("pytest")
+
+
+@nox.session
+@nox.parametrize(
+    "command",
+    [
+        nox.param("html", id="build"),
+        nox.param("doctest", id="test"),
+        nox.param("rinoh", id="pdf"),
+    ],
+)
+def docs(session: nox.Session, command: str) -> None:
+    session.install(
+        *install_package("docs", ["sphinx", "rinohtype", "recommonmark", "toml"])
+    )
+    session.run(
+        "python3",
+        "-m",
+        "sphinx.cmd.build",
+        "-b",
+        command,
+        "-d",
+        "docs/_build/doctrees",
+        "docs/",
+        f"docs/_build/{command}",
+        env={"AUTODOCDIR": "api"},
+    )
+
+
+@nox.session
+def build(session: nox.Session) -> None:
+    session.install(
+        *install_package("build", ["build", "setuptools", "setuptools_scm", "wheel"])
+    )
+    session.run("python3", "-m", "build", "--sdist", "--wheel", ".")
